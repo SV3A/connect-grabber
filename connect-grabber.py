@@ -19,54 +19,69 @@ videos = {
 
 class Clip():
     def __init__(self, path, session, link):
+        """ Constructed function """
         self.session = session
         self.link = link
 
-        self.parse_day()
+        # Get list number, i.e. the digits preceding the '.'
+        self.parse_number()
 
-        self.local_dir = path + '/' + str(self.day)
+        # Directory
+        self.local_dir = path + '/' + str(self.number)
 
-        # Directory containing video clips
+        # Directory containing downloaded video clips
         self.clips_dir = (self.local_dir + '/' +
                           self.session.replace('.', '_'))
 
-    def parse_day(self):
-        # Extract the day of the session
-        day_search = re.search(r'^\d{1,2}', self.session)
+    def parse_number(self):
+        """ Get list/session number"""
+        num_search = re.search(r'^\d{1,2}', self.session)
 
-        if not day_search:
+        if not num_search:
             raise NameError('Invalid key')
         else:
-            day = day_search.group(0)
-
-        self.day = day
-        pass
+            self.number = num_search.group(0)
 
 
 class ConnectGrabber():
     def __init__(self, videos):
+        """ Constructor function """
+        # Setup working dir / output folder
         self.setup_dir()
 
-        # Clips list
+        # Instantiate the clips
         self.clips = []
 
-        # Instantiate the clips
         for session, link in videos.items():
             self.clips.append(Clip(self.path, session, link))
 
+        # Feedback
         print('Found ' + str(len(self.clips)) + ' clips')
 
     def setup_dir(self):
+        """ Makes a working folder and changes directory to it """
+
+        # Check if default dir exists
         if os.path.exists(os.getcwd() + '/' + 'grabs'):
-            print('lol')
-            exit(0)
+            found_dir = False
+            user_dir = 'grabs'
+            while found_dir is not True:
+                user_dir = input('\'' + user_dir + '\' dir exists.\n' +
+                                 'Choose another folder name: ')
+                if not os.path.exists(os.getcwd() + '/' + user_dir):
+                    found_dir = True
+
+            os.mkdir(os.getcwd() + '/' + user_dir)
+            os.chdir('./' + user_dir)
         else:
             os.mkdir(os.getcwd() + '/' + 'grabs')
             os.chdir('./grabs')
 
+        # Store working path
         self.path = os.getcwd()
 
     def files_to_render(self, clips_dir):
+        """ Collect the files to be merged together """
         file_1 = None
         file_2 = None
 
@@ -83,21 +98,22 @@ class ConnectGrabber():
         return (file_1, file_2)
 
     def download(self):
+        """ Convert Adobe link and download and extract assets """
         for i in range(len(self.clips)):
 
             clip = self.clips[i]
 
             # Create directory to store assets
-            if os.path.exists(clip.local_dir):
-                pass
-            else:
+            if not os.path.exists(clip.local_dir):
                 os.mkdir(clip.local_dir)
 
+            # Feedback
             print('Downloading session ' + str(clip.session))
 
             # Append Adobe Connect API call
             clip.link += 'output/filename.zip?download=zip'
 
+            # Download and extract
             r = requests.get(clip.link)
 
             if r.status_code == 200:
@@ -109,6 +125,7 @@ class ConnectGrabber():
                 pass
 
     def transcode(self):
+        """ Takes the two video tracks and merges them """
         for i in range(len(self.clips)):
 
             file_1, file_2 = self.files_to_render(self.clips[i].clips_dir)
@@ -116,15 +133,16 @@ class ConnectGrabber():
             output_file = (self.clips[i].local_dir + '/' +
                            self.clips[i].session.replace('.', '_') + '.mp4')
 
-            p = subprocess.call(['ffmpeg', '-i', file_1, '-i', file_2,
-                                 '-filter_complex',
-                                 '[0:v]pad=1024+320:720[int];' +
-                                 '[int][1:v]overlay=320:0[v]',
-                                 '-map', '[v]', '-map', '0:a',
-                                 '-c:v', 'libx264', '-crf', '24', '-r', '24',
-                                 '-preset', 'veryfast', output_file])
+            subprocess.call(['ffmpeg', '-i', file_1, '-i', file_2,
+                             '-filter_complex',
+                             '[0:v]pad=1024+320:720[int];' +
+                             '[int][1:v]overlay=320:0[v]',
+                             '-map', '[v]', '-map', '0:a',
+                             '-c:v', 'libx264', '-crf', '24', '-r', '24',
+                             '-preset', 'veryfast', output_file])
 
 
+# Init
 prog = ConnectGrabber(videos)
 
 prog.download()
